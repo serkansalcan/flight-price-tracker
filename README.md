@@ -31,10 +31,10 @@
 <h2>Configuration</h2>
 
 <ul>
-  <li><code>origin</code>: The three-letter code for the airport of origin.</li>
-  <li><code>destination</code>: The three-letter code for the airport of destination.</li>
+  <li><code>origin</code>: The code for the airport of origin.</li>
+  <li><code>destination</code>: The code for the airport of destination.</li>
   <li><code>currency</code>: The currency in which the flight prices are displayed (e.g., USD, EUR).</li>
-  <li><code>user_country</code>: The two-letter country code for the user's country (used for local deals and information).</li>
+  <li><code>user_country</code>: The country code for the user's country (used for local deals and information).</li>
   <li><code>months</code>: A list of months (in YYYY-MM format) for which to search for flight deals.</li>
 </ul>
 
