@@ -1,10 +1,11 @@
-import requests
 import csv
+import logging
 import os
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import requests
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
 
+SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY")
 
 def get_lowest_prices(origin, destination, currency, user_country, months):
     lowest_prices = {'direct_price': float('inf'), 'indirect_price': float('inf')}
@@ -69,26 +70,21 @@ def save_lowest_prices_to_csv(lowest_prices):
 
 
 def send_email(subject, message):
-    sender_email = "email1@gmail.com"
-    sender_password = ""
+    sg = SendGridAPIClient(api_key=SENDGRID_API_KEY)
 
-    recipient_email = "email2@gmail.com"
+    from_email = "email1@gmail.com"
+    to_email = "email2@gmail.com"
 
-    msg = MIMEMultipart()
-    msg["From"] = sender_email
-    msg["To"] = recipient_email
-    msg["Subject"] = subject
-    msg.attach(MIMEText(message, "plain"))
+    mail = Mail(from_email=from_email,
+                to_emails=to_email,
+                subject=subject,
+                plain_text_content=message)
 
     try:
-        smtp_server = smtplib.SMTP("smtp.gmail.com", 587)
-        smtp_server.starttls()
-        smtp_server.login(sender_email, sender_password)
-        smtp_server.sendmail(sender_email, recipient_email, msg.as_string())
-        smtp_server.quit()
-        print("Email sent successfully.")
+        response = sg.send(mail)
+        logging.info("Email sent. Response: %s", response.status_code)
     except Exception as e:
-        print("Error sending email:", str(e))
+        logging.error("Error sending email: %s", str(e))
 
 
 if __name__ == "__main__":
@@ -98,9 +94,22 @@ if __name__ == "__main__":
     user_country = "TR"
     months = ["2023-10", "2023-11", "2023-12", "2024-01", "2024-02", "2024-03"]
 
-    stored_lowest_prices = load_lowest_prices_from_csv()
-    lowest_prices, lowest_dates = get_lowest_prices(origin, destination, currency, user_country, months)
+    logging.basicConfig(filename='flight_price_tracker.log', level=logging.INFO, format='%(asctime)s - %(levelname)s: %(message)s')
 
+    if not SENDGRID_API_KEY:
+        logging.error("SendGrid API key not provided. Exiting.")
+        exit(1)
+
+    stored_lowest_prices = load_lowest_prices_from_csv()
+
+    try:
+        lowest_prices, lowest_dates = get_lowest_prices(origin, destination, currency, user_country, months)
+    except requests.exceptions.RequestException as e:
+        logging.error("Error making HTTP request: %s", str(e))
+        exit(1)
+
+    price_drop_message = ""
+    subject = ""
     for flight_type in ['direct', 'indirect']:
         price_key = f'{flight_type}_price'
         date_key = f'{flight_type}_date'
@@ -108,15 +117,16 @@ if __name__ == "__main__":
         if lowest_prices[price_key] < stored_lowest_prices[price_key]:
             price_drop = stored_lowest_prices[price_key] - lowest_prices[price_key]
             if stored_lowest_prices[price_key] == float('inf'):
-                subject = f"{flight_type.capitalize()} Flight Alert"
+                subject = f"{origin} to {destination} Flight Alert"
                 message = f"{flight_type.capitalize()} Flight: {lowest_dates[date_key]}, price: ${lowest_prices[price_key]}"
             else:
-                subject = f"{flight_type.capitalize()} Flight Price Drop Alert"
+                subject = f"{origin} to {destination} Flight Price Drop Alert"
                 message = f"{flight_type.capitalize()} Flight: ${price_drop} drop, {lowest_dates[date_key]}, price: ${lowest_prices[price_key]}"
 
-            send_email(subject, message)
+            price_drop_message += f"\n{message}"
             stored_lowest_prices[price_key] = lowest_prices[price_key]
 
+    if price_drop_message:
+        send_email(subject, price_drop_message)
+
     save_lowest_prices_to_csv(stored_lowest_prices)
-
-
